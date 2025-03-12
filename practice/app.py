@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import pickle
 import os
+import time
 from datetime import datetime, timedelta
 
 # Initialize Flask app
@@ -20,6 +21,7 @@ ADMIN_COLLECTION_NAME = "users"
 REGISTRATION_DB_NAME = "registration_database"
 REGISTRATION_COLLECTION_NAME = "users"
 
+
 # Initialize MongoDB clients and databases
 client = MongoClient(MONGO_URI)
 
@@ -30,9 +32,83 @@ admin_users_collection = admin_db[ADMIN_COLLECTION_NAME]
 # Registration Database
 registration_db = client[REGISTRATION_DB_NAME]
 registration_users_collection = registration_db[REGISTRATION_COLLECTION_NAME]
-
+db = client["admin_database"]
 # Temporary storage for OTP
 otp_storage = {}
+
+
+# Collection Names
+# Ensure Collections Exist
+db.create_collection("us_stocks", capped=False, ignore_existing=True)
+db.create_collection("ns_stocks", capped=False, ignore_existing=True)
+db.create_collection("us_intraday_stocks", capped=False, ignore_existing=True)
+db.create_collection("ns_intraday_stocks", capped=False, ignore_existing=True)
+
+# Collection Names
+us_stocks_col = db["us_stocks"]
+ns_stocks_col = db["ns_stocks"]
+us_intraday_col = db["us_intraday_stocks"]
+ns_intraday_col = db["ns_intraday_stocks"]
+
+# Stock Lists
+us_stocks = ['AAPL', 'GOOG', 'MSFT', 'AMZN', 'TSLA', 'WMT', 'NFLX', 'ORCL', 'META', 'MCD', 'BAC']
+ns_stocks = {
+    "Reliance Industries": "RELIANCE.NS",
+    "Tata Consultancy Services": "TCS.NS",
+    "Infosys": "INFY.NS",
+    "HDFC Bank": "HDFCBANK.NS",
+    "Wipro": "WIPRO.NS",
+    "Zomato": "ZOMATO.NS",
+    "Airtel": "BHARTIARTL.NS",
+    "ICICI Bank": "ICICIBANK.NS",
+}
+
+# Function to fetch and update stock data
+def update_stock_data(stock_symbol, collection, interval="1d", is_intraday=False):
+    try:
+        stock = yf.Ticker(stock_symbol)
+        data = stock.history(period="1d" if is_intraday else "1y", interval="1m" if is_intraday else "1d")
+        
+        if data.empty:
+            print(f"No data available for {stock_symbol}")
+            return
+        
+        latest = data.iloc[-1]
+        stock_data = {
+            "symbol": stock_symbol,
+            "time": datetime.now(),
+            "price": round(latest["Close"], 2),
+            "open": round(latest["Open"], 2),
+            "high": round(latest["High"], 2),
+            "low": round(latest["Low"], 2),
+            "volume": int(latest["Volume"])
+        }
+        
+        collection.update_one({"symbol": stock_symbol}, {"$set": stock_data}, upsert=True)
+        print(f"Updated {stock_symbol} in {collection.name}")
+    except Exception as e:
+        print(f"Error updating {stock_symbol}: {e}")
+
+# Continuous Stock Data Updater
+def update_all_stocks():
+    try:
+        while True:
+            print("Updating stock data...")
+            for symbol in us_stocks:
+                update_stock_data(symbol, us_stocks_col)
+                update_stock_data(symbol, us_intraday_col, is_intraday=True)
+            
+            for name, symbol in ns_stocks.items():
+                update_stock_data(symbol, ns_stocks_col)
+                update_stock_data(symbol, ns_intraday_col, is_intraday=True)
+            
+            print("Update cycle complete. Waiting for the next cycle...")
+            time.sleep(60)  # Update every minute
+    except KeyboardInterrupt:
+        print("Process interrupted by user. Exiting...")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+
 
 # Create a test admin user
 admin_email = "ckvinith786@gmail.com"
@@ -787,4 +863,5 @@ def predict_intraday_niftypharma():
     return jsonify(predict_intraday_prices())
 
 if __name__ == '__main__':
+    update_all_stocks()
     app.run(debug=True)
