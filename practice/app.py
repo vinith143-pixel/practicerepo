@@ -21,7 +21,6 @@ ADMIN_COLLECTION_NAME = "users"
 REGISTRATION_DB_NAME = "registration_database"
 REGISTRATION_COLLECTION_NAME = "users"
 
-
 # Initialize MongoDB clients and databases
 client = MongoClient(MONGO_URI)
 
@@ -32,83 +31,12 @@ admin_users_collection = admin_db[ADMIN_COLLECTION_NAME]
 # Registration Database
 registration_db = client[REGISTRATION_DB_NAME]
 registration_users_collection = registration_db[REGISTRATION_COLLECTION_NAME]
-db = client["admin_database"]
-# Temporary storage for OTP
-otp_storage = {}
 
-
-# Collection Names
-# Ensure Collections Exist
-db.create_collection("us_stocks", capped=False, ignore_existing=True)
-db.create_collection("ns_stocks", capped=False, ignore_existing=True)
-db.create_collection("us_intraday_stocks", capped=False, ignore_existing=True)
-db.create_collection("ns_intraday_stocks", capped=False, ignore_existing=True)
-
-# Collection Names
-us_stocks_col = db["us_stocks"]
-ns_stocks_col = db["ns_stocks"]
-us_intraday_col = db["us_intraday_stocks"]
-ns_intraday_col = db["ns_intraday_stocks"]
-
-# Stock Lists
-us_stocks = ['AAPL', 'GOOG', 'MSFT', 'AMZN', 'TSLA', 'WMT', 'NFLX', 'ORCL', 'META', 'MCD', 'BAC']
-ns_stocks = {
-    "Reliance Industries": "RELIANCE.NS",
-    "Tata Consultancy Services": "TCS.NS",
-    "Infosys": "INFY.NS",
-    "HDFC Bank": "HDFCBANK.NS",
-    "Wipro": "WIPRO.NS",
-    "Zomato": "ZOMATO.NS",
-    "Airtel": "BHARTIARTL.NS",
-    "ICICI Bank": "ICICIBANK.NS",
-}
-
-# Function to fetch and update stock data
-def update_stock_data(stock_symbol, collection, interval="1d", is_intraday=False):
-    try:
-        stock = yf.Ticker(stock_symbol)
-        data = stock.history(period="1d" if is_intraday else "1y", interval="1m" if is_intraday else "1d")
-        
-        if data.empty:
-            print(f"No data available for {stock_symbol}")
-            return
-        
-        latest = data.iloc[-1]
-        stock_data = {
-            "symbol": stock_symbol,
-            "time": datetime.now(),
-            "price": round(latest["Close"], 2),
-            "open": round(latest["Open"], 2),
-            "high": round(latest["High"], 2),
-            "low": round(latest["Low"], 2),
-            "volume": int(latest["Volume"])
-        }
-        
-        collection.update_one({"symbol": stock_symbol}, {"$set": stock_data}, upsert=True)
-        print(f"Updated {stock_symbol} in {collection.name}")
-    except Exception as e:
-        print(f"Error updating {stock_symbol}: {e}")
-
-# Continuous Stock Data Updater
-def update_all_stocks():
-    try:
-        while True:
-            print("Updating stock data...")
-            for symbol in us_stocks:
-                update_stock_data(symbol, us_stocks_col)
-                update_stock_data(symbol, us_intraday_col, is_intraday=True)
-            
-            for name, symbol in ns_stocks.items():
-                update_stock_data(symbol, ns_stocks_col)
-                update_stock_data(symbol, ns_intraday_col, is_intraday=True)
-            
-            print("Update cycle complete. Waiting for the next cycle...")
-            time.sleep(60)  # Update every minute
-    except KeyboardInterrupt:
-        print("Process interrupted by user. Exiting...")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-
+# Create collections for stock predictions
+us_stock_prediction_collection = admin_db["us_stock_prediction"]
+ns_stock_prediction_collection = admin_db["ns_stock_prediction"]
+us_intraday_prediction_collection = admin_db["us_intraday_prediction"]
+ns_intraday_prediction_collection = admin_db["ns_intraday_prediction"]
 
 # Create a test admin user
 admin_email = "ckvinith786@gmail.com"
@@ -123,6 +51,7 @@ else:
 @app.route('/volme')
 def volume():
     return render_template('volume.html')
+
 # Admin Login Page
 @app.route('/')
 def index():
@@ -202,7 +131,6 @@ def get_users():
         return jsonify({"error": str(e)}), 500
 
 # Stock Prediction Route
-    # Updated list of stock symbols (Companies)
 companies = ['AAPL', 'GOOG', 'MSFT', 'AMZN', 'TSLA', 'WMT', 'NFLX', 'ORCL', 'META', 'MCD', 'BAC']
 
 # Function to fetch stock data
@@ -259,8 +187,6 @@ def calculate_growth(data):
     growth = ((end_price - start_price) / start_price) * 100
     return growth, start_price, end_price
 
-
-#Us Stock Prediction 
 # Flask route for the main page (UI)
 @app.route('/us_stocks', methods=['POST','GET'])
 def us_stocks():
@@ -301,6 +227,17 @@ def predict():
     elif growth < 0:
         suggestion = "Sell"
 
+    # Store the prediction in MongoDB
+    us_stock_prediction_collection.insert_one({
+        "symbol": stock_symbol,
+        "prediction": next_day_prediction,
+        "growth": growth,
+        "start_price": start_price,
+        "end_price": end_price,
+        "suggestion": suggestion,
+        "timestamp": datetime.now()
+    })
+
     return jsonify({
         'prediction': next_day_prediction,
         'growth': growth,
@@ -309,10 +246,7 @@ def predict():
         'suggestion': suggestion
     })
 
-
-#Indian Stock Prediction 
-
-# List of companies and their stock symbols
+# Indian Stock Prediction 
 companies_ns = {
     "Reliance Industries": "RELIANCE.NS",
     "Tata Consultancy Services": "TCS.NS",
@@ -375,6 +309,17 @@ def predict_us():
         # Generate suggestion based on predicted price and actual end price
         suggestion = "Buy" if predicted_price > end_price else "Sell"
 
+        # Store the prediction in MongoDB
+        ns_stock_prediction_collection.insert_one({
+            "symbol": symbol,
+            "prediction": round(predicted_price, 2),
+            "growth": round(growth, 2),
+            "start_price": round(start_price, 2),
+            "end_price": round(end_price, 2),
+            "suggestion": suggestion,
+            "timestamp": datetime.now()
+        })
+
         # Respond with calculated data
         return jsonify({
             "prediction": round(predicted_price, 2),
@@ -387,8 +332,7 @@ def predict_us():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-#us intraday
-
+# US Intraday Prediction
 companies_us_intraday = ['AAPL', 'GOOG', 'MSFT', 'AMZN', 'TSLA', 'WMT', 'NFLX', 'ORCL', 'META', 'MCD', 'BAC']
 
 def fetch_intraday_data(symbol, interval="1m"):
@@ -429,6 +373,16 @@ def predict_us_intraday():
     
     trend = "Uptrend" if prediction > y.iloc[-1] else "Downtrend"
     
+    # Store the prediction in MongoDB
+    us_intraday_prediction_collection.insert_one({
+        "symbol": symbol,
+        "prediction": round(prediction, 2),
+        "current": round(y.iloc[-1], 2),
+        "trend": trend,
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": datetime.now()
+    })
+
     return jsonify({
         "symbol": symbol,
         "prediction": round(prediction, 2),
@@ -437,7 +391,7 @@ def predict_us_intraday():
         "time": datetime.now().strftime("%H:%M:%S")
     })
 
-#indian intraday
+# Indian Intraday Prediction
 companies_ns_intraday = {
     "Indian Bank": "INDIANB.NS",
     "Reliance Industries": "RELIANCE.NS",
@@ -451,16 +405,6 @@ companies_ns_intraday = {
     "Hindustan Unilever": "HINDUNILVR.NS",
     "ICICI Bank": "ICICIBANK.NS",
 }
-
-def fetch_intraday_data(symbol, interval="1m"):
-    stock = yf.Ticker(symbol)
-    df = stock.history(period="1d", interval=interval)
-    if df.empty:
-        return None
-    
-    df = df[['Close']]
-    df['Minutes'] = np.arange(len(df))
-    return df
 
 @app.route("/ns_intraday")
 def ns_intraday():
@@ -491,6 +435,16 @@ def predict_ns_intraday():
     
     trend = "Uptrend" if prediction > y.iloc[-1] else "Downtrend"
     
+    # Store the prediction in MongoDB
+    ns_intraday_prediction_collection.insert_one({
+        "symbol": symbol,
+        "prediction": round(prediction, 2),
+        "current": round(y.iloc[-1], 2),
+        "trend": trend,
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": datetime.now()
+    })
+
     return jsonify({
         "symbol": symbol,
         "prediction": round(prediction, 2),
@@ -499,9 +453,7 @@ def predict_ns_intraday():
         "time": datetime.now().strftime("%H:%M:%S")
     })
 
-# Function to fetch live Nifty 50 stock data
-
-# Fetch Live Stock Data
+# Fetch Live Nifty 50 stock data
 def get_nifty50_data():
     stock_symbol = "^NSEI"
     stock = yf.Ticker(stock_symbol)
@@ -563,7 +515,6 @@ def live_data():
 @app.route("/predict-intraday")
 def predict_intraday():
     return jsonify(predict_intraday_prices())
-
 
 # Fetch Live Sensex Data
 def get_sensex_data():
@@ -863,5 +814,4 @@ def predict_intraday_niftypharma():
     return jsonify(predict_intraday_prices())
 
 if __name__ == '__main__':
-    update_all_stocks()
     app.run(debug=True)
