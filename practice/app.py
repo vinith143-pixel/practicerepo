@@ -9,6 +9,7 @@ from sklearn.preprocessing import StandardScaler
 import pickle
 import os
 import time
+from flask import make_response
 from datetime import datetime, timedelta
 
 # Initialize Flask app
@@ -111,6 +112,7 @@ def register():
 @app.route('/login', methods=['GET'])
 def login():
     return render_template('user_login.html')
+    
 
 @app.route('/validate', methods=['POST'])
 def validate():
