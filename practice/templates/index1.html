@@ -25,6 +25,11 @@
         .company-card {
             margin-bottom: 20px;
         }
+        .btn-chart {
+            margin-top: 10px;
+            background-color: #28a745;
+            border-color: #28a745;
+        }
     </style>
 </head>
 <body class="bg-info">
@@ -42,6 +47,7 @@
                     <div class="card-body bg-warning">
                         <h5 class="card-title">{{ company }}</h5>
                         <button class="btn btn-primary w-100" onclick="getPrediction('{{ company }}')">Get Prediction</button>
+                        <button class="btn btn-success w-100 btn-chart" onclick="viewChart('{{ company }}')">View Live Chart</button>
                         <div id="result-{{ company }}" class="mt-3"></div>
                     </div>
                 </div>
@@ -74,6 +80,14 @@
                     const resultDiv = document.getElementById(`result-${symbol}`);
                     resultDiv.innerHTML = '<p class="text-danger">Error fetching prediction. Please try again.</p>';
                 });
+        }
+        
+        function viewChart(symbol) {
+            // Open TradingView chart for the selected stock in a new tab
+            // For Indian stocks, we'll use NSE symbol format (e.g., NSE:RELIANCE)
+            const nseSymbol = `NSE:${symbol.toUpperCase().replace(' ', '')}`;
+            const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(nseSymbol)}`;
+            window.open(chartUrl, '_self');
         }
     </script>
 </body>

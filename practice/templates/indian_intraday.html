@@ -44,7 +44,8 @@
                 <div class="card">
                     <div class="card-body bg-light">
                         <h5 class="card-title">{{ company }}</h5>
-                        <button class="btn btn-primary w-100" onclick="getPrediction('{{ company }}')">Get Prediction</button>
+                        <button class="btn btn-primary w-100 mb-2" onclick="getPrediction('{{ company }}')">Get Prediction</button>
+                        <button class="btn btn-success w-100" onclick="viewLiveChart('{{ company }}')">View Chart</button>
                         <div id="result-{{ company }}" class="mt-3"></div>
                         <div class="chart-container">
                             <canvas id="chart-{{ company }}"></canvas>
@@ -76,6 +77,13 @@
                     const resultDiv = document.getElementById(`result-${symbol}`);
                     resultDiv.innerHTML = '<p>Error fetching prediction. Please try again.</p>';
                 });
+        }
+
+        function viewLiveChart(symbol) {
+            // Convert symbol to NSE format (assuming Indian stocks)
+            const nseSymbol = symbol.toUpperCase().replace(' ', '') + '.NSE';
+            // Open TradingView chart in a new tab with the symbol
+            window.open(`https://www.tradingview.com/chart/?symbol=NSE%3A${symbol}`, '_self');
         }
 
         function updateChart(symbol, currentPrice, predictedPrice) {

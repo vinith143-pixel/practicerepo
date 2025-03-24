@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, url_for, redirect, session
+from flask import Flask, render_template, request, jsonify, url_for, redirect
 from pymongo import MongoClient
 import yfinance as yf
 import numpy as np
@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 
 # Initialize Flask app
 app = Flask(__name__)
-app.secret_key = 'vinith143'
 
 # MongoDB connection details
 MONGO_URI = "mongodb+srv://vinith:vinith143@cluster0.t4ah2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -49,9 +48,6 @@ def generate_captcha():
 
 @app.route('/aadhar_verification', methods=['GET', 'POST'])
 def aadhar_verification():
-    if 'email' not in session:
-        return redirect(url_for('login'))
-
     if request.method == 'GET':
         captcha = generate_captcha()
         return render_template('AADHAR_VERIFY.html', captcha=captcha)
@@ -69,9 +65,6 @@ def aadhar_verification():
 
         if user_captcha != captcha:
             return jsonify({"error": "Invalid captcha"}), 400
-
-        if email != session['email']:
-            return jsonify({"error": "Email does not match the logged-in user. Please enter the email associated with your account."}), 400
 
         # Check if the Aadhar number already exists in the database
         existing_aadhar = aadhar_verify_collection.find_one({"aadhar_no": aadhar_no})
@@ -135,7 +128,6 @@ def admin_login():
     user = admin_users_collection.find_one({"email": email})
 
     if user and user['password'] == password:
-        session['email'] = email
         return render_template('admin_dashboard.html')  # Admin dashboard page
     else:
         return jsonify({"error": "Invalid email or password"}), 401
@@ -189,7 +181,6 @@ def validate():
     password = data.get('password')
     user = registration_users_collection.find_one({"email": email, "password": password})
     if user:
-        session['email'] = email
         return render_template('home.html')
     return "Enter a Valid Email Or Password"
 
