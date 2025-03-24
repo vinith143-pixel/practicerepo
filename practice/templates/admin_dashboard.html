@@ -17,6 +17,9 @@
           <th class="px-4 py-2">Mobile Number</th>
           <th class="px-4 py-2">Email</th>
           <th class="px-4 py-2">Password</th>
+          <th class="px-4 py-2">Aadhar Number</th>
+          <th class="px-4 py-2">Age</th>
+          <th class="px-4 py-2">Timestamp</th>
         </tr>
       </thead>
       <tbody id="userTable" class="text-center">
@@ -26,28 +29,48 @@
   </div>
 
   <script>
-    // Fetch user data and populate the table
-    async function fetchUsers() {
+    // Fetch user data and Aadhar details, then populate the table
+    async function fetchData() {
       try {
-        const response = await axios.get('http://127.0.0.1:5000/api/users');
-        const users = response.data;
+        // Fetch user data
+        const usersResponse = await axios.get('http://127.0.0.1:5000/api/users');
+        const users = usersResponse.data;
 
+        // Fetch Aadhar details
+        const aadharResponse = await axios.get('http://127.0.0.1:5000/api/aadhar_details');
+        const aadharDetails = aadharResponse.data;
+
+        // Combine user data and Aadhar details based on email
+        const combinedData = users.map(user => {
+          const aadhar = aadharDetails.find(aadhar => aadhar.email === user.email) || {};
+          return {
+            ...user,
+            aadhar_no: aadhar.aadhar_no || 'N/A',
+            age: aadhar.age || 'N/A',
+            timestamp: aadhar.timestamp || 'N/A'
+          };
+        });
+
+        // Populate the table
         const userTable = document.getElementById('userTable');
-        userTable.innerHTML = users.map(user => `
+        userTable.innerHTML = combinedData.map(data => `
           <tr>
-            <td class="border px-4 py-2">${user.firstname}</td>
-            <td class="border px-4 py-2">${user.mobile}</td>
-            <td class="border px-4 py-2">${user.email}</td>
-            <td class="border px-4 py-2">${user.password}</td>
+            <td class="border px-4 py-2">${data.firstname}</td>
+            <td class="border px-4 py-2">${data.mobile}</td>
+            <td class="border px-4 py-2">${data.email}</td>
+            <td class="border px-4 py-2">${data.password}</td>
+            <td class="border px-4 py-2">${data.aadhar_no}</td>
+            <td class="border px-4 py-2">${data.age}</td>
+            <td class="border px-4 py-2">${data.timestamp}</td>
           </tr>
         `).join('');
       } catch (error) {
-        console.error('Error fetching user data:', error);
+        console.error('Error fetching data:', error);
       }
     }
 
     // Call the function when the page loads
-    window.onload = fetchUsers;
+    window.onload = fetchData;
   </script>
 </body>
 </html>

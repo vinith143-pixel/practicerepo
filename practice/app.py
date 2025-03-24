@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, url_for, redirect, session
 from pymongo import MongoClient
 import yfinance as yf
 import numpy as np
@@ -9,11 +9,14 @@ from sklearn.preprocessing import StandardScaler
 import pickle
 import os
 import time
-from flask import make_response
+from pymongo.errors import DuplicateKeyError
+import random
+import string
 from datetime import datetime, timedelta
 
 # Initialize Flask app
 app = Flask(__name__)
+app.secret_key = 'vinith143'
 
 # MongoDB connection details
 MONGO_URI = "mongodb+srv://vinith:vinith143@cluster0.t4ah2.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -28,6 +31,7 @@ client = MongoClient(MONGO_URI)
 # Admin Database
 admin_db = client[ADMIN_DB_NAME]
 admin_users_collection = admin_db[ADMIN_COLLECTION_NAME]
+aadhar_verify_collection = admin_db["aadhar_verify"]
 
 # Registration Database
 registration_db = client[REGISTRATION_DB_NAME]
@@ -39,6 +43,72 @@ ns_stock_prediction_collection = admin_db["ns_stock_prediction"]
 us_intraday_prediction_collection = admin_db["us_intraday_prediction"]
 ns_intraday_prediction_collection = admin_db["ns_intraday_prediction"]
 
+# Generate Captcha
+def generate_captcha():
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+@app.route('/aadhar_verification', methods=['GET', 'POST'])
+def aadhar_verification():
+    if 'email' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'GET':
+        captcha = generate_captcha()
+        return render_template('AADHAR_VERIFY.html', captcha=captcha)
+    
+    if request.method == 'POST':
+        name = request.form.get('name')
+        email = request.form.get('email')
+        aadhar_no = request.form.get('aadhar_no')
+        age = request.form.get('age')
+        user_captcha = request.form.get('captcha')
+        captcha = request.form.get('captcha_hidden')
+
+        if not all([name, email, aadhar_no, age, user_captcha]):
+            return jsonify({"error": "All fields are required"}), 400
+
+        if user_captcha != captcha:
+            return jsonify({"error": "Invalid captcha"}), 400
+
+        if email != session['email']:
+            return jsonify({"error": "Email does not match the logged-in user. Please enter the email associated with your account."}), 400
+
+        # Check if the Aadhar number already exists in the database
+        existing_aadhar = aadhar_verify_collection.find_one({"aadhar_no": aadhar_no})
+
+        if existing_aadhar:
+            # If the Aadhar number exists with a different email
+            if existing_aadhar["email"] != email:
+                return jsonify({"error": "Aadhar number already registered with another email."}), 400
+            else:
+                # If the Aadhar number exists with the same email, update the details
+                aadhar_verify_collection.update_one(
+                    {"aadhar_no": aadhar_no},
+                    {
+                        "$set": {
+                            "name": name,
+                            "age": age,
+                            "timestamp": datetime.now()
+                        }
+                    }
+                )
+                return jsonify({"message": "Aadhar details updated successfully!"})
+        else:
+            # If the Aadhar number does not exist, insert new details
+            try:
+                aadhar_verify_collection.insert_one({
+                    "name": name,
+                    "email": email,
+                    "aadhar_no": aadhar_no,
+                    "age": age,
+                    "timestamp": datetime.now()
+                })
+                return jsonify({"message": "Aadhar verification successful! Your details have been stored."})
+
+            except DuplicateKeyError:
+                # Handle the case where the Aadhar number is already registered
+                return jsonify({"error": "Aadhar number already registered. Please use a different Aadhar number."}), 400
+
 # Create a test admin user
 admin_email = "ckvinith786@gmail.com"
 admin_password = "vinith143@V"
@@ -47,11 +117,6 @@ if not admin_users_collection.find_one({"email": admin_email}):
     print("Test admin user created successfully in the admin database!")
 else:
     print("Test admin user already exists in the admin database!")
-
-#volume route
-@app.route('/volme')
-def volume():
-    return render_template('volume.html')
 
 # Admin Login Page
 @app.route('/')
@@ -70,6 +135,7 @@ def admin_login():
     user = admin_users_collection.find_one({"email": email})
 
     if user and user['password'] == password:
+        session['email'] = email
         return render_template('admin_dashboard.html')  # Admin dashboard page
     else:
         return jsonify({"error": "Invalid email or password"}), 401
@@ -96,6 +162,9 @@ def register():
     if password != confirm_password:
         return jsonify({"error": "Passwords do not match"}), 400
 
+    if registration_users_collection.find_one({"email": email}):
+        return jsonify({"error": "Email already registered"}), 400
+
     if registration_users_collection.find_one({"mobile": mobile}):
         return jsonify({"error": "Mobile number already registered"}), 400
 
@@ -112,14 +181,15 @@ def register():
 @app.route('/login', methods=['GET'])
 def login():
     return render_template('user_login.html')
-    
 
 @app.route('/validate', methods=['POST'])
 def validate():
     data = request.form
     email = data.get('email')
     password = data.get('password')
-    if registration_users_collection.find_one({"email": email, "password": password}):
+    user = registration_users_collection.find_one({"email": email, "password": password})
+    if user:
+        session['email'] = email
         return render_template('home.html')
     return "Enter a Valid Email Or Password"
 
@@ -129,6 +199,15 @@ def get_users():
     try:
         users = list(registration_users_collection.find({}, {"_id": 0}))  # Exclude `_id` field
         return jsonify(users)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/aadhar_details', methods=['GET'])
+def get_aadhar_details():
+    try:
+        # Fetch all Aadhar verification details from the collection
+        aadhar_details = list(aadhar_verify_collection.find({}, {"_id": 0}))  # Exclude `_id` field
+        return jsonify(aadhar_details)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
