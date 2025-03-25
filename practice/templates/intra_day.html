@@ -37,7 +37,7 @@
     <div class="container">
         <div class="row">
             <div class="col-12 text-center">
-                <h1 class="mb-4">Us Intraday Stock Prediction App</h1>
+                <h1 class="mb-4">US Intraday Stock Prediction App</h1>
                 <p>Select a company to see its stock prediction, growth, and buy/sell suggestions.</p>
             </div>
             
@@ -64,27 +64,62 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function getPrediction(symbol) {
-            fetch(`/predict_us_intraday?symbol=${symbol}`)
-                .then(response => response.json())
+            fetch(`/predict_us_intraday?symbol=${encodeURIComponent(symbol)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     const resultDiv = document.getElementById(`result-${symbol}`);
+                    if (data.error) {
+                        resultDiv.innerHTML = `<p class="text-danger">${data.error}</p>`;
+                        return;
+                    }
+                    
+                    // Calculate growth if not provided in response
+                    let growth = data.growth;
+                    if (growth === undefined && data.current && data.prediction) {
+                        growth = ((data.prediction - data.current) / data.current) * 100;
+                    }
+                    
+                    // Determine suggestion if not provided
+                    let suggestion = data.suggestion;
+                    if (!suggestion && growth !== undefined) {
+                        suggestion = growth > 0.1 ? "Buy" : growth < -0.1 ? "Sell" : "Hold";
+                    }
+                    
+                    // Determine trend if not provided
+                    let trend = data.trend;
+                    if (!trend && growth !== undefined) {
+                        trend = growth > 0 ? "Uptrend" : "Downtrend";
+                    }
+                    
                     resultDiv.innerHTML = `
                         <p><strong>Current Price:</strong> $${data.current || "N/A"}</p>
                         <p><strong>Predicted Next Minute Price:</strong> $${data.prediction || "N/A"}</p>
-                        <p style=${data.trend=="Uptrend" ? 'color:green;':'color:red;'}><strong>Market Trend:</strong> ${data.trend || "N/A"}</p>
-                        <p><strong>Time:</strong> ${data.time || "N/A"}</p>
+                        <p><strong>Growth:</strong> ${growth !== undefined ? growth.toFixed(2)+'%' : "N/A"}</p>
+                        <p style="${trend === "Uptrend" ? 'color:green;' : 'color:red;'}"><strong>Market Trend:</strong> ${trend || "N/A"}</p>
+                        <p style="${suggestion === "Buy" ? 'color:green;' : suggestion === "Hold" ? 'color:black;' : 'color:red;'}"><strong>Suggestion:</strong> ${suggestion || "N/A"}</p>
+                        <p><strong>Time:</strong> ${data.time || new Date().toLocaleTimeString()}</p>
                     `;
-                    updateChart(symbol, data.current, data.prediction);
+                    
+                    // Only update chart if we have both current and predicted prices
+                    if (data.current && data.prediction) {
+                        updateChart(symbol, data.current, data.prediction);
+                    }
                 })
                 .catch(error => {
                     const resultDiv = document.getElementById(`result-${symbol}`);
-                    resultDiv.innerHTML = '<p>Error fetching prediction. Please try again.</p>';
+                    resultDiv.innerHTML = '<p class="text-danger">Error fetching prediction. Please try again.</p>';
+                    console.error('Error:', error);
                 });
         }
 
         function viewLiveChart(symbol) {
             // Open TradingView chart for the selected US stock
-            window.open(`https://www.tradingview.com/chart/?symbol=${symbol}`, '_self');
+            window.open(`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`, '_self');
         }
 
         function updateChart(symbol, currentPrice, predictedPrice) {

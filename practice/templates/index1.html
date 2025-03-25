@@ -83,10 +83,53 @@
         }
         
         function viewChart(symbol) {
-            // Open TradingView chart for the selected stock in a new tab
-            // For Indian stocks, we'll use NSE symbol format (e.g., NSE:RELIANCE)
-            const nseSymbol = `NSE:${symbol.toUpperCase().replace(' ', '')}`;
-            const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(nseSymbol)}`;
+            // Mapping of company names to their correct NSE symbols
+            const nseSymbolMap = {
+                'RELIANCE': 'RELIANCE',
+                'TCS': 'TCS',
+                'HDFC BANK': 'HDFCBANK',
+                'INFOSYS': 'INFY',
+                'HUL': 'HINDUNILVR',
+                'ITC': 'ITC',
+                'BHARTI AIRTEL': 'BHARTIARTL',
+                'SBI': 'SBIN',
+                'LIC': 'LICI',
+                'ADANI PORTS': 'ADANIPORTS',
+                'TATA MOTORS': 'TATAMOTORS',
+                'ONGC': 'ONGC',
+                'NTPC': 'NTPC',
+                'HCL TECH': 'HCLTECH',
+                'WIPRO': 'WIPRO',
+                'ICICI BANK': 'ICICIBANK',
+                'KOTAK BANK': 'KOTAKBANK',
+                'AXIS BANK': 'AXISBANK',
+                'LT': 'LT',
+                'BAJAJ FINANCE': 'BAJFINANCE'
+            };
+            
+            // Get the standardized company name (uppercase, trimmed)
+            const companyKey = symbol.toUpperCase().trim();
+            
+            // Find the NSE symbol - first check exact match, then try partial match
+            let nseSymbol = nseSymbolMap[companyKey];
+            
+            if (!nseSymbol) {
+                // Try to find a partial match if exact match not found
+                for (const [key, value] of Object.entries(nseSymbolMap)) {
+                    if (companyKey.includes(key) || key.includes(companyKey)) {
+                        nseSymbol = value;
+                        break;
+                    }
+                }
+            }
+            
+            if (!nseSymbol) {
+                alert(`Could not find NSE symbol for ${symbol}. Trying with default symbol.`);
+                nseSymbol = companyKey.replace(/\s+/g, '');
+            }
+            
+            // Open TradingView chart with proper NSE symbol format
+            const chartUrl = `https://www.tradingview.com/chart/?symbol=NSE:${nseSymbol}`;
             window.open(chartUrl, '_self');
         }
     </script>
